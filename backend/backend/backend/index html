@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FitLock - AI-powered app locker. Complete pushups to unlock your favorite apps.">
+    <meta name="keywords" content="fitness, pushup tracker, AI, computer vision, workout app">
+    <meta name="author" content="FitLock">
+    <title>FitLock - AI Pushup Tracker</title>
+    
+    <!-- React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+        }
+
+        #root {
+            min-height: 100vh;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(-25%);
+                animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+            }
+            50% {
+                transform: translateY(0);
+                animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+            }
+        }
+
+        .animate-bounce {
+            animation: bounce 1s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Icon Components
+        const Lock = ({ className = "w-6 h-6" }) => (
+            <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        );
+
+        const Unlock = ({ className = "w-6 h-6" }) => (
+            <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+            </svg>
+        );
+
+        const Camera = ({ className = "w-6 h-6" }) => (
+            <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                <circle cx="12" cy="13" r="3"/>
+            </svg>
+        );
+
+        const Trophy = ({ className = "w-6 h-6" }) => (
+            <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                <path d="M4 22h16"/>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+        );
+
+        const Target = ({ className = "w-6 h-6" }) => (
+            <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+            </svg>
+        );
+
+        // Main App Component
+        function FitLockApp() {
+            const [pushupGoal, setPushupGoal] = useState(20);
+            const [currentCount, setCurrentCount] = useState(0);
+            const [isLocked, setIsLocked] = useState(true);
+            const [isCameraActive, setIsCameraActive] = useState(false);
+            const [showCelebration, setShowCelebration] = useState(false);
+            const [selectedToLock, setSelectedToLock] = useState([]);
+            const [selectedToUnlock, setSelectedToUnlock] = useState([]);
+            const [setupStep, setSetupStep] = useState('lock');
+            const [feedback, setFeedback] = useState('');
+            const [stage, setStage] = useState('');
+            const [apiStatus, setApiStatus] = useState('checking');
+            
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const streamRef = useRef(null);
+            const intervalRef = useRef(null);
+
+            const availableApps = [
+                { id: 'instagram', name: 'Instagram', icon: '📷' },
+                { id: 'tiktok', name: 'TikTok', icon: '🎵' },
+                { id: 'twitter', name: 'Twitter', icon: '🐦' },
+                { id: 'youtube', name: 'YouTube', icon: '▶️' },
+                { id: 'facebook', name: 'Facebook', icon: '👥' },
+                { id: 'snapchat', name: 'Snapchat', icon: '👻' },
+                { id: 'reddit', name: 'Reddit', icon: '🤖' },
+                { id: 'netflix', name: 'Netflix', icon: '🎬' },
+            ];
+
+            // Check API connection on mount
+            useEffect(() => {
+                fetch('http://localhost:5000/')
+                    .then(res => res.json())
+                    .then(() => setApiStatus('connected'))
+                    .catch(() => setApiStatus('disconnected'));
+            }, []);
+
+            const progress = (currentCount / pushupGoal) * 100;
+            const isUnlocked = currentCount >= pushupGoal;
+
+            useEffect(() => {
+                if (isUnlocked && isLocked) {
+                    setIsLocked(false);
+                    setShowCelebration(true);
+                    stopCamera();
+                    setTimeout(() => setShowCelebration(false), 3000);
+                }
+            }, [isUnlocked, isLocked]);
+
+            const startCamera = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { width: 640, height: 480 } 
+                    });
+                    
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        streamRef.current = stream;
+                        setIsCameraActive(true);
+                        
+                        intervalRef.current = setInterval(() => {
+                            captureAndSendFrame();
+                        }, 100);
+                    }
+                } catch (err) {
+                    console.error('Camera access denied:', err);
+                    alert('Please allow camera access to count pushups!');
+                }
+            };
+
+            const stopCamera = () => {
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                }
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                setIsCameraActive(false);
+            };
+
+            const captureAndSendFrame = async () => {
+                if (!videoRef.current || !canvasRef.current) return;
+                
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0);
+                
+                const frameData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                try {
+                    const response = await fetch('http://localhost:5000/api/process-frame', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ frame: frameData })
+                    });
+                    
+                    const data = await response.json();
+                    setCurrentCount(data.count);
+                    setFeedback(data.feedback || '');
+                    setStage(data.stage || '');
+                } catch (err) {
+                    console.error('Error processing frame:', err);
+                }
+            };
+
+            const startWorkout = async () => {
+                setSetupStep('workout');
+                
+                try {
+                    await fetch('http://localhost:5000/api/session/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            goal: pushupGoal,
+                            locked_apps: selectedToLock,
+                            unlock_apps: selectedToUnlock
+                        })
+                    });
+                } catch (err) {
+                    console.error('Error starting session:', err);
+                }
+                
+                startCamera();
+            };
+
+            const resetWorkout = async () => {
+                stopCamera();
+                setCurrentCount(0);
+                setIsLocked(true);
+                setShowCelebration(false);
+                setFeedback('');
+                setStage('');
+                
+                try {
+                    await fetch('http://localhost:5000/api/reset', { method: 'POST' });
+                } catch (err) {
+                    console.error('Error resetting:', err);
+                }
+            };
+
+            const toggleAppToLock = (appId) => {
+                setSelectedToLock(prev => 
+                    prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId]
+                );
+            };
+
+            const toggleAppToUnlock = (appId) => {
+                setSelectedToUnlock(prev => 
+                    prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId]
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 flex items-center justify-center p-4">
+                    <div className="w-full max-w-4xl">
+                        {/* API Status Warning */}
+                        {apiStatus === 'disconnected' && (
+                            <div className="mb-4 bg-red-500/20 border border-red-500 rounded-lg p-3 text-center">
+                                <p className="text-red-200 text-sm">
+                                    ⚠️ Backend not connected. Start Flask server: <code className="bg-black/30 px-2 py-1 rounded">python backend/app.py</code>
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Header */}
+                        <div className="text-center mb-6">
+                            <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 rounded-full mb-4 backdrop-blur-sm">
+                                {isLocked ? <Lock className="w-10 h-10 text-red-400" /> : <Unlock className="w-10 h-10 text-green-400" />}
+                            </div>
+                            <h1 className="text-4xl font-bold text-white mb-2">FitLock</h1>
+                            <p className="text-purple-200">Earn your apps with real pushups</p>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                            {/* Setup/Status Panel */}
+                            <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-white/20">
+                                {setupStep === 'lock' ? (
+                                    // Step 1: Select Apps to Lock
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-bold text-white">Step 1: Apps to Lock</h2>
+                                        <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto">
+                                            {availableApps.map((app) => (
+                                                <button
+                                                    key={app.id}
+                                                    onClick={() => toggleAppToLock(app.id)}
+                                                    className={`p-3 rounded-xl transition-all ${
+                                                        selectedToLock.includes(app.id)
+                                                            ? 'bg-red-500/30 border-2 border-red-400'
+                                                            : 'bg-white/5 border-2 border-white/10 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="text-3xl mb-1">{app.icon}</div>
+                                                    <div className="text-white text-xs">{app.name}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={() => setSetupStep('unlock')}
+                                            disabled={selectedToLock.length === 0}
+                                            className="w-full bg-red-500 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-600 transition-all"
+                                        >
+                                            Next ({selectedToLock.length} locked)
+                                        </button>
+                                    </div>
+                                ) : setupStep === 'unlock' ? (
+                                    // Step 2: Select Rewards
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-bold text-white">Step 2: Rewards</h2>
+                                        <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto">
+                                            {availableApps.map((app) => (
+                                                <button
+                                                    key={app.id}
+                                                    onClick={() => toggleAppToUnlock(app.id)}
+                                                    className={`p-3 rounded-xl transition-all ${
+                                                        selectedToUnlock.includes(app.id)
+                                                            ? 'bg-green-500/30 border-2 border-green-400'
+                                                            : 'bg-white/5 border-2 border-white/10 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="text-3xl mb-1">{app.icon}</div>
+                                                    <div className="text-white text-xs">{app.name}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setSetupStep('lock')}
+                                                className="flex-1 bg-white/10 text-white py-2 rounded-xl hover:bg-white/20 transition-all"
+                                            >
+                                                Back
+                                            </button>
+                                            <button
+                                                onClick={() => setSetupStep('goal')}
+                                                disabled={selectedToUnlock.length === 0}
+                                                className="flex-1 bg-green-500 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-green-600 transition-all"
+                                            >
+                                                Next ({selectedToUnlock.length})
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : setupStep === 'goal' ? (
+                                    // Step 3: Set Goal
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-bold text-white">Step 3: Set Goal</h2>
+                                        <div className="flex items-center gap-4">
+                                            <input
+                                                type="range"
+                                                min="10"
+                                                max="100"
+                                                step="5"
+                                                value={pushupGoal}
+                                                onChange={(e) => setPushupGoal(Number(e.target.value))}
+                                                className="flex-1 h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                            <span className="text-3xl font-bold text-white w-16 text-center">{pushupGoal}</span>
+                                        </div>
+                                        <div className="bg-white/5 rounded-xl p-3 text-sm">
+                                            <p className="text-red-300 mb-1">🔒 Locking: {selectedToLock.length} apps</p>
+                                            <p className="text-green-300">🎁 Unlocking: {selectedToUnlock.length} apps</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setSetupStep('unlock')}
+                                                className="flex-1 bg-
