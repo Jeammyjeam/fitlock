@@ -1,0 +1,10 @@
+fitlock/
+├── backend/
+│   ├── app.py
+│   ├── pushup_detector.py
+│   └── requirements.txt
+├── frontend/
+│   └── (we'll create a simple HTML version)
+├── .gitignore
+├── LICENSE
+└── README.md
